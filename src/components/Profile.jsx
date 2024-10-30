@@ -15,6 +15,30 @@ const Profile = () => {
     const { user, fetchUserData, fetchAskedQuestions, deleteQuestion } = useFirebase();
     const navigate = useNavigate();
 
+    // Helper function to format date
+    const formatDate = (dateValue) => {
+        if (!dateValue) return 'Unknown date';
+        
+        try {
+            if (typeof dateValue === 'string') {
+                return new Date(dateValue).toLocaleDateString();
+            }
+            
+            if (dateValue.seconds) {
+                return new Date(dateValue.seconds * 1000).toLocaleDateString();
+            }
+            
+            if (dateValue instanceof Date) {
+                return dateValue.toLocaleDateString();
+            }
+            
+            return 'Unknown date';
+        } catch (error) {
+            console.error('Error formatting date:', error);
+            return 'Unknown date';
+        }
+    };
+
     useEffect(() => {
         if (!user) {
             navigate('/login');
@@ -48,24 +72,6 @@ const Profile = () => {
         } finally {
             setLoading(false);
         }
-    };
-
-    const getFullName = () => {
-        if (userData) {
-            console.log('User data in getFullName:', userData);
-            const firstName = userData.name || '';
-            const lastName = userData.surname || '';
-            if (firstName && lastName) {
-                const fullName = `${firstName} ${lastName}`;
-                console.log('Generated full name:', fullName);
-                return fullName;
-            } else if (firstName) {
-                return firstName;
-            } else if (lastName) {
-                return lastName;
-            }
-        }
-        return user?.email?.split('@')[0] || 'User';
     };
 
     const handleDeleteQuestion = async (questionId) => {
@@ -107,23 +113,16 @@ const Profile = () => {
                     <div className="flex flex-col items-start">
                         <h1 className="text-3xl font-bold text-gray-800 mb-2">Profile Overview</h1>
                         <h2 className="text-xl font-semibold text-gray-600">
-                            Welcome, {getFullName()} !
+                            Welcome, {userData?.name} {userData?.surname}!
                         </h2>
                         <div className="text-gray-500 mt-1 space-y-1">
-                            <p>Email: <span className="text-gray-700 font-medium">
-                                {userData?.email || user?.email}
-                            </span></p>
+                            <p>Email: <span className="text-gray-700 font-medium">{userData?.email || user?.email}</span></p>
                             {userData?.createdAt && (
                                 <p>Member since: <span className="text-gray-700 font-medium">
-                                    {typeof userData.createdAt === 'string' 
-                                        ? new Date(userData.createdAt).toLocaleDateString()
-                                        : userData.createdAt?.toDate?.()?.toLocaleDateString() || 
-                                          new Date(userData.createdAt).toLocaleDateString()}
+                                    {formatDate(userData.createdAt)}
                                 </span></p>
                             )}
-                            <p>Questions Asked: <span className="text-gray-700 font-medium">
-                                {askedQuestions.length}
-                            </span></p>
+                            <p>Questions Asked: <span className="text-gray-700 font-medium">{askedQuestions.length}</span></p>
                         </div>
                     </div>
                     <div className="ml-4">

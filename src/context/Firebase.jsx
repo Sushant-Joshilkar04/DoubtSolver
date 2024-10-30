@@ -24,6 +24,38 @@ const db = getFirestore(app);
 // Create a Firebase context
 const FirebaseContext = createContext(null);
 
+// Add this helper function at the top of your Firebase.jsx
+const formatDate = (dateValue) => {
+  if (!dateValue) return 'Unknown date';
+  
+  try {
+    // Handle string date (ISO format)
+    if (typeof dateValue === 'string') {
+      return new Date(dateValue).toLocaleDateString();
+    }
+    
+    // Handle Firestore Timestamp
+    if (dateValue?.toDate) {
+      return dateValue.toDate().toLocaleDateString();
+    }
+    
+    // Handle seconds timestamp
+    if (dateValue.seconds) {
+      return new Date(dateValue.seconds * 1000).toLocaleDateString();
+    }
+    
+    // Handle Date object
+    if (dateValue instanceof Date) {
+      return dateValue.toLocaleDateString();
+    }
+    
+    return 'Unknown date';
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return 'Unknown date';
+  }
+};
+
 // Add this function definition before the FirebaseProvider component
 const verifyEmailLink = async () => {
   try {
@@ -222,31 +254,21 @@ export const FirebaseProvider = ({ children }) => {
         );
       }
 
-      const [questionsSnapshot, usersSnapshot] = await Promise.all([
-        getDocs(questionsQuery),
-        getDocs(collection(db, 'users'))
-      ]);
-
-      // Create a map of user data
-      const userMap = {};
-      usersSnapshot.docs.forEach(doc => {
-        userMap[doc.id] = doc.data();
-      });
-
-      const questions = questionsSnapshot.docs.map(doc => {
+      const querySnapshot = await getDocs(questionsQuery);
+      const questions = querySnapshot.docs.map(doc => {
         const data = doc.data();
-        const userData = userMap[data.userId] || {};
-        
         return {
           id: doc.id,
           title: data.title,
           category: data.category,
-          createdAt: data.createdAt?.toDate()?.toLocaleDateString() || 'Unknown date',
+          userEmail: data.userEmail,
+          createdAt: formatDate(data.createdAt), // Use the formatDate helper
           answers: data.answers || [],
-          author: `${userData.name || ''} ${userData.surname || ''}`.trim() || userData.email || 'Unknown User'
+          author: data.userEmail // Include author information
         };
       });
       
+      console.log('Fetched questions:', questions);
       return questions;
     } catch (error) {
       console.error('Error fetching questions:', error);
@@ -375,53 +397,22 @@ export const FirebaseProvider = ({ children }) => {
   const createQuestion = async (title, category) => {
     if (!user) throw new Error('User not authenticated');
 
+    const questionData = {
+      title,
+      category,
+      userId: user.uid,
+      userEmail: user.email,
+      createdAt: new Date().toISOString(), // Use ISO string format consistently
+      answers: []
+    };
+
     try {
-      // First, ensure user document exists
-      const userRef = doc(db, 'users', user.uid);
-      const userDoc = await getDoc(userRef);
-
-      if (!userDoc.exists()) {
-        await setDoc(userRef, {
-          email: user.email,
-          name: user.displayName || 'User',
-          createdAt: new Date().toISOString(),
-          questionsAsked: 0,
-          answersGiven: 0,
-          lastLogin: new Date().toISOString(),
-          role: 'student'
-        });
-      }
-
-      // Create the question
-      const questionData = {
-        title,
-        category,
-        userId: user.uid,
-        userEmail: user.email,
-        createdAt: new Date().toISOString(), // Use ISO string instead of serverTimestamp
-        answers: []
-      };
-
-      // Add question to Firestore
       const docRef = await addDoc(collection(db, 'questions'), questionData);
-
-      // Update categories
-      await updateCategories(category);
-
-      // Update user's question count
-      await updateDoc(userRef, {
-        questionsAsked: increment(1),
-        lastActive: new Date().toISOString()
-      });
-
       console.log('Question submitted with ID:', docRef.id);
       return docRef.id;
     } catch (error) {
       console.error('Error submitting question:', error);
-      if (error.code === 'not-found') {
-        throw new Error('User profile not found. Please try logging in again.');
-      }
-      throw new Error('Failed to submit question: ' + error.message);
+      throw new Error('Failed to submit question');
     }
   };
 
@@ -461,21 +452,29 @@ export const FirebaseProvider = ({ children }) => {
     try {
       if (!user) throw new Error("User must be logged in");
       
+      console.log("Fetching questions for user:", user.email);
+      
       const questionsQuery = query(
-        collection(db, 'questions'),
-        where('userId', '==', user.uid),
-        orderBy('createdAt', 'desc')
+        collection(db, "questions"),
+        where("userId", "==", user.uid),
+        orderBy("createdAt", "desc")
       );
       
-      const snapshot = await getDocs(questionsQuery);
+      const querySnapshot = await getDocs(questionsQuery);
       
-      return snapshot.docs.map(doc => ({
-        id: doc.id,
-        title: doc.data().title,
-        category: doc.data().category,
-        createdAt: doc.data().createdAt?.toDate()?.toLocaleDateString() || 'Unknown date',
-        answers: doc.data().answers || []
-      }));
+      const questions = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          title: data.title,
+          category: data.category,
+          createdAt: formatDate(data.createdAt),
+          answers: data.answers || []
+        };
+      });
+
+      console.log("Processed questions:", questions);
+      return questions;
     } catch (error) {
       console.error("Error fetching asked questions:", error);
       throw error;
