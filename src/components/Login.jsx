@@ -1,66 +1,118 @@
- // components/Login.jsx
+// components/Login.jsx
 
 import React, { useState } from 'react';
-import { useFirebase } from '../context/Firebase'; // Ensure the import path is correct
+import { useFirebase } from '../context/Firebase';
 import { useNavigate } from 'react-router-dom';
 
 function Login() {
-  const { login } = useFirebase(); // Destructure login from useFirebase
+  const { login } = useFirebase();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
-  const navigate = useNavigate(); // Use useNavigate for redirection
+  const [isLoading, setIsLoading] = useState(false);
+  const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
-    e.preventDefault(); // Prevent default form submission
+    e.preventDefault();
+    if (isLoading) return;
+    
+    setIsLoading(true);
+    setError(null);
+
     try {
-      await login(email, password); // Call the login method from context
-      setEmail(''); // Clear email field
-      setPassword(''); // Clear password field
-      setError(null); // Clear any previous errors
-      navigate('/'); // Redirect to home on successful login
+      // Validate email format
+      if (!email.endsWith('@pccoepune.org')) {
+        throw new Error('Please use your college email (@pccoepune.org)');
+      }
+
+      await login(email, password);
+      navigate('/');
     } catch (error) {
-      setError(error.message); // Set error message if login fails
       console.error('Authentication error:', error);
+      
+      // Handle different error cases
+      if (error.message.includes('not found') || 
+          error.message.includes('sign up')) {
+        setError(
+          <div>
+            <p>{error.message}</p>
+            <button
+              onClick={() => navigate('/signup')}
+              className="text-blue-600 hover:text-blue-800 underline mt-2"
+            >
+              Click here to sign up
+            </button>
+          </div>
+        );
+      } else {
+        setError(error.message);
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
     <div className="max-w-md mx-auto mt-10 p-6 bg-white rounded-lg shadow-md">
       <h1 className="text-2xl font-bold mb-4">Login</h1>
-      {error && <p className="text-red-600 mb-4">{error}</p>}
+      
+      {error && (
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-4">
+          {typeof error === 'string' ? <p className="text-red-700">{error}</p> : error}
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-4">
-        <input
-          type="email"
-          placeholder="Email"
-          className="w-full p-2 border rounded"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          className="w-full p-2 border rounded"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
+        <div>
+          <label htmlFor="email" className="block text-gray-700 mb-2">College Email</label>
+          <input
+            id="email"
+            type="email"
+            placeholder="username@pccoepune.org"
+            className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            disabled={isLoading}
+            required
+          />
+        </div>
+
+        <div>
+          <label htmlFor="password" className="block text-gray-700 mb-2">Password</label>
+          <input
+            id="password"
+            type="password"
+            placeholder="Enter your password"
+            className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={isLoading}
+            required
+          />
+        </div>
+
         <button
           type="submit"
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          className={`w-full bg-blue-600 text-white px-4 py-2 rounded transition-colors
+            ${isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-700'}`}
+          disabled={isLoading}
         >
-          Login
+          {isLoading ? 'Logging in...' : 'Login'}
         </button>
       </form>
-      <button
-        onClick={() => navigate('/signup')} // Navigate to the Signup page
-        className="mt-4 text-blue-500"
-      >
-        Don't have an account? Sign Up
-      </button>
+
+      <div className="mt-6 text-center">
+        <p className="text-gray-600">Don't have an account?</p>
+        <button
+          onClick={() => navigate('/signup')}
+          className="text-blue-600 hover:text-blue-800 font-medium"
+          disabled={isLoading}
+        >
+          Sign up here
+        </button>
+      </div>
     </div>
   );
 }
 
-export default Login; // Ensure default export
+export default Login;

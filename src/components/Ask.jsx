@@ -1,60 +1,165 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useFirebase } from '../context/Firebase';
-import { useNavigate } from 'react-router-dom'; // Import useNavigate
+import { useNavigate } from 'react-router-dom';
 
 function Ask() {
-  const { createQuestion } = useFirebase(); // Use Firebase context to call createQuestion method
-  const [title, setTitle] = useState('');   // State for question title
-  const [details, setDetails] = useState(''); // State for question details
-  const [error, setError] = useState(null); // State for error handling
-  const navigate = useNavigate(); // Initialize useNavigate
+  const { createQuestion, fetchCategories } = useFirebase();
+  const [title, setTitle] = useState('');
+  const [category, setCategory] = useState('');
+  const [newCategory, setNewCategory] = useState('');
+  const [existingCategories, setExistingCategories] = useState([]);
+  const [isAddingNewCategory, setIsAddingNewCategory] = useState(false);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
-  // Handle form submission
+  // Fetch existing categories when component mounts
+  useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        const categories = await fetchCategories();
+        console.log('Loaded categories:', categories);
+        setExistingCategories(categories || []);
+      } catch (error) {
+        console.error('Error loading categories:', error);
+        setError('Failed to load categories');
+      }
+    };
+    loadCategories();
+  }, [fetchCategories]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError(null);
+    setLoading(true);
 
     try {
-      // Create the question by calling createQuestion method
-      await createQuestion(title, details);
-      
-      // Reset input fields on successful submission
-      setTitle('');
-      setDetails('');
-      setError(null);
+      let finalCategory = isAddingNewCategory ? newCategory.trim() : category;
 
-      // Navigate to home page after submission
-      navigate('/'); // Redirect to home
+      if (isAddingNewCategory && !newCategory.trim()) {
+        throw new Error('Please enter a category name');
+      }
+      if (!isAddingNewCategory && !category) {
+        throw new Error('Please select a category');
+      }
+
+      // Create the question with the category
+      await createQuestion(title, finalCategory);
+      
+      // Reset form
+      setTitle('');
+      setCategory('');
+      setNewCategory('');
+      setIsAddingNewCategory(false);
+      
+      // Navigate to home page
+      navigate('/');
     } catch (error) {
-      setError(error.message); // Set error message if submission fails
-      console.error('Error submitting question:', error); // Log error
+      console.error('Error submitting question:', error);
+      setError(error.message || 'Failed to submit question. Please try again.');
+      
+      // If error indicates user profile issues, redirect to login
+      if (error.message.includes('User profile not found')) {
+        alert('Session expired. Please log in again.');
+        navigate('/login');
+        return;
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-4">Ask a Question</h1>
-      {error && <p className="text-red-600 mb-4">{error}</p>} {/* Display error message if exists */}
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <input
-          type="text"
-          placeholder="Enter your question title"
-          className="w-full p-2 border rounded"
-          value={title} // Bind input value to title state
-          onChange={(e) => setTitle(e.target.value)} // Update title state on change
-          required
-        />
-        {/* <textarea
-          placeholder="Provide more details about your question"
-          className="w-full p-2 border rounded h-32"
-          value={details} // Bind textarea value to details state
-          onChange={(e) => setDetails(e.target.value)} // Update details state on change
-          required
-        ></textarea> */}
+    <div className="max-w-2xl mx-auto">
+      <h1 className="text-2xl font-bold mb-6">Ask a Question</h1>
+      
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          {error}
+        </div>
+      )}
+      
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Title Input */}
+        <div>
+          <label className="block text-gray-700 font-medium mb-2">
+            Question Title
+          </label>
+          <input
+            type="text"
+            placeholder="Enter your question title"
+            className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            required
+            disabled={loading}
+          />
+        </div>
+
+        {/* Category Selection */}
+        <div>
+          <label className="block text-gray-700 font-medium mb-2">
+            Category
+          </label>
+          {!isAddingNewCategory ? (
+            <div className="space-y-2">
+              <select
+                className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                required
+                disabled={loading}
+              >
+                <option value="">Select a category</option>
+                {existingCategories.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setIsAddingNewCategory(true)}
+                className="text-blue-600 hover:text-blue-800 text-sm mt-2"
+                disabled={loading}
+              >
+                + Create New Category
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <input
+                type="text"
+                placeholder="Enter new category name"
+                className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value)}
+                required
+                disabled={loading}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddingNewCategory(false);
+                  setNewCategory('');
+                }}
+                className="text-blue-600 hover:text-blue-800 text-sm mt-2"
+                disabled={loading}
+              >
+                Back to Existing Categories
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Submit Button */}
         <button 
           type="submit" 
-          className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+          className={`w-full bg-blue-600 text-white px-6 py-3 rounded-md transition-colors duration-200 
+            ${loading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-700'}`}
+          disabled={loading}
         >
-          Submit Question
+          {loading ? 'Submitting...' : 'Submit Question'}
         </button>
       </form>
     </div>

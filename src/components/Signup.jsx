@@ -1,4 +1,4 @@
- // Signup.jsx
+// Signup.jsx
 import React, { useState } from 'react';
 import { useFirebase } from '../context/Firebase'; // Ensure the import path is correct
 import { useNavigate } from 'react-router-dom';
@@ -9,18 +9,34 @@ const Signup = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState(null);
+    const [loading, setLoading] = useState(false);
     const { signup } = useFirebase(); // Destructure signup from useFirebase
     const navigate = useNavigate(); // Use useNavigate for redirection
 
     const handleSubmit = async (e) => {
         e.preventDefault(); // Prevent default form submission
+        setLoading(true);
+        setError(null);
 
         try {
-            await signup(email, password, firstName, lastName); // Call the signup method from context
-            navigate('/'); // Redirect to home on successful signup
+            if (!email.endsWith('@pccoepune.org')) {
+                throw new Error('Please use your college email (@pccoepune.org)');
+            }
+
+            if (password.length < 6) {
+                throw new Error('Password should be at least 6 characters long');
+            }
+
+            const result = await signup(email, password, firstName, lastName);
+            alert(result.message || 'Please check your college email for verification link');
+            navigate('/login');
         } catch (error) {
-            setError(error.message); // Set error message if signup fails
-            console.error('Signup failed:', error);
+            setError(error.message);
+            if (error.message.includes('operation-not-allowed')) {
+                setError('Sign-up is temporarily disabled. Please try again later or contact support.');
+            }
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -39,6 +55,7 @@ const Signup = () => {
                         required
                         className="border rounded w-full py-2 px-3"
                         placeholder="Enter your first name"
+                        disabled={loading}
                     />
                 </div>
                 <div className="mb-4">
@@ -51,18 +68,20 @@ const Signup = () => {
                         required
                         className="border rounded w-full py-2 px-3"
                         placeholder="Enter your last name"
+                        disabled={loading}
                     />
                 </div>
                 <div className="mb-4">
-                    <label className="block text-gray-700" htmlFor="email">Email:</label>
+                    <label className="block text-gray-700" htmlFor="email">College Email:</label>
                     <input
                         type="email"
                         id="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         required
+                        placeholder="username@pccoepune.org"
                         className="border rounded w-full py-2 px-3"
-                        placeholder="Enter your email"
+                        disabled={loading}
                     />
                 </div>
                 <div className="mb-4">
@@ -75,13 +94,15 @@ const Signup = () => {
                         required
                         className="border rounded w-full py-2 px-3"
                         placeholder="Enter your password"
+                        disabled={loading}
                     />
                 </div>
                 <button
                     type="submit"
-                    className="w-full bg-red-600 text-white py-2 rounded"
+                    className={`w-full bg-red-600 text-white py-2 rounded ${loading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-700'}`}
+                    disabled={loading}
                 >
-                    Sign Up
+                    {loading ? 'Sending verification...' : 'Sign Up'}
                 </button>
             </form>
         </div>

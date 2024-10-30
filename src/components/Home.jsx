@@ -1,99 +1,122 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useFirebase } from '../context/Firebase';
 import QuestionCard from './QuestionCard';
 import Login from './Login';
 
 function Home() {
-  const { user, fetchQuestions, updateUpvote } = useFirebase(); // Get user, fetchQuestions, and updateUpvote from Firebase context
-  const [questions, setQuestions] = useState([]); // State to hold fetched questions
-  const [loading, setLoading] = useState(true); // State to manage loading status
-  const [searchTerm, setSearchTerm] = useState(''); // State to hold the search term
-  const [filteredQuestions, setFilteredQuestions] = useState([]); // State to hold filtered questions
+  const { 
+    user, 
+    fetchQuestions, 
+    fetchCategories
+  } = useFirebase();
+  
+  const [questions, setQuestions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [categories, setCategories] = useState([]);
+  const [filteredQuestions, setFilteredQuestions] = useState([]);
 
-  // Fetch questions when the component mounts, regardless of user state
-  useEffect(() => {
-    const loadQuestions = async () => {
-      setLoading(true); // Start loading
-      try {
-        const fetchedQuestions = await fetchQuestions(); // Fetch questions from Firestore
-        setQuestions(fetchedQuestions); // Update state with fetched questions
-        setFilteredQuestions(fetchedQuestions); // Set the initial filtered questions as all questions
-      } catch (error) {
-        console.error('Failed to load questions:', error); // Handle any errors during fetching
-      } finally {
-        setLoading(false); // End loading
-      }
-    };
-
-    loadQuestions(); // Call the loadQuestions function
-  }, [fetchQuestions]); // Dependency array ensures this effect runs only once
-
-  const handleUpvote = async (id, currentUpvotes) => {
+  // Create memoized fetch function
+  const loadData = useCallback(async () => {
+    setLoading(true);
     try {
-      await updateUpvote(id, currentUpvotes + 1); // Update the upvote count in Firestore
-      setQuestions((prevQuestions) =>
-        prevQuestions.map((question) =>
-          question.id === id ? { ...question, upvotes: currentUpvotes + 1 } : question
-        )
-      );
+      const [fetchedQuestions, fetchedCategories] = await Promise.all([
+        fetchQuestions(),
+        fetchCategories()
+      ]);
+      
+      console.log('Fetched categories:', fetchedCategories);
+      console.log('Fetched questions:', fetchedQuestions);
+      
+      setQuestions(fetchedQuestions || []);
+      setCategories(fetchedCategories || []);
+      setFilteredQuestions(fetchedQuestions || []);
     } catch (error) {
-      console.error('Error upvoting question:', error); // Handle any errors during upvoting
+      console.error('Failed to load data:', error);
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [fetchQuestions, fetchCategories]);
 
-  // Filter questions based on the search term
+  // Initial data load
   useEffect(() => {
-    if (searchTerm) {
-      setFilteredQuestions(
-        questions.filter((question) =>
-          question.title.toLowerCase().includes(searchTerm.toLowerCase())
-        )
-      );
-    } else {
-      setFilteredQuestions(questions); // Reset to all questions if no search term
+    if (user) {
+      loadData();
     }
-  }, [searchTerm, questions]);
+  }, [user, loadData]);
 
-  // Render the Home component
+  // Filter questions based on search term and category
+  useEffect(() => {
+    let filtered = questions;
+
+    if (selectedCategory) {
+      filtered = filtered.filter(question => question.category === selectedCategory);
+    }
+
+    if (searchTerm) {
+      filtered = filtered.filter(question =>
+        question.title.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    setFilteredQuestions(filtered);
+  }, [searchTerm, selectedCategory, questions]);
+
   if (!user) {
-    return <Login />; // Render Login if user is not authenticated
+    return <Login />;
   }
 
   return (
     <div>
-      {/* Search Bar */}
-      <div className="sticky top-0 z-10  p-4  mb-6">
-        <input
-          type="text"
-          placeholder="Search questions by title..."
-          value={searchTerm} // Bind the input value to the searchTerm state
-          onChange={(e) => setSearchTerm(e.target.value)} // Update the search term on input change
-          className="px-6 py-2 border border-gray-300 rounded-full w-full max-w-2xl mx-auto block focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
-        />
+      <div className="sticky top-0 z-10 bg-white p-4 space-y-4">
+        {/* Search and Filter Controls */}
+        <div className="flex gap-4">
+          <input
+            type="text"
+            placeholder="Search questions..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="flex-1 px-6 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">All Categories</option>
+            {categories.map(category => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="container mx-auto px-4">
         <h1 className="text-2xl font-bold mb-4">Welcome to DoubtSolver</h1>
-        <p className="text-gray-600 mb-6">Ask questions, get answers, and learn from others in our community.</p>
+        <p className="text-gray-600 mb-6">
+          Ask questions, get answers, and learn from others in our community.
+        </p>
 
-        {loading ? ( // Conditional rendering based on loading state
-          <p>Loading questions...</p>
+        {loading ? (
+          <div className="flex justify-center items-center py-8">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+          </div>
         ) : (
           <div className="space-y-4">
-            {filteredQuestions.length > 0 ? ( // Check if there are questions to display
+            {filteredQuestions.length > 0 ? (
               filteredQuestions.map((question) => (
                 <QuestionCard
                   key={question.id}
-                  id={question.id}
-                  title={question.title}
-                  author={question.userEmail}
-                  upvotes={question.upvotes}
-                  answers={question.answers || []} // Fallback to an empty array
-                  onUpvote={handleUpvote} // Pass the upvote handler to QuestionCard
+                  {...question}
                 />
               ))
             ) : (
-              <p className="text-gray-600">No questions found matching your search criteria.</p> // Message when no questions are found
+              <p className="text-gray-600 text-center py-8">
+                No questions found matching your criteria.
+              </p>
             )}
           </div>
         )}

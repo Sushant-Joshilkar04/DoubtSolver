@@ -9,6 +9,7 @@ import Ask from './components/Ask';
 import Login from './components/Login';
 import Profile from './components/Profile';
 import Signup from './components/Signup'; // Import the Signup component
+import VerifyEmail from './components/VerifyEmail'; // Import the VerifyEmail component
 
 function App() {
   return (
@@ -25,6 +26,7 @@ function App() {
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/signup" element={<Signup />} />
+                <Route path="/verify-email" element={<VerifyEmail />} />
               </Routes>
             </div>
           </main>
