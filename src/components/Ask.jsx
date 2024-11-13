@@ -3,7 +3,7 @@ import { useFirebase } from '../context/Firebase';
 import { useNavigate } from 'react-router-dom';
 
 function Ask() {
-  const { createQuestion, fetchCategories } = useFirebase();
+  const { user, createQuestion, fetchCategories, updateCategories } = useFirebase();
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('');
   const [newCategory, setNewCategory] = useState('');
@@ -26,7 +26,7 @@ function Ask() {
       }
     };
     loadCategories();
-  }, [fetchCategories]);
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -34,6 +34,10 @@ function Ask() {
     setLoading(true);
 
     try {
+      if (!user) {
+        throw new Error('Please login to ask a question');
+      }
+
       let finalCategory = isAddingNewCategory ? newCategory.trim() : category;
 
       if (isAddingNewCategory && !newCategory.trim()) {
@@ -41,6 +45,14 @@ function Ask() {
       }
       if (!isAddingNewCategory && !category) {
         throw new Error('Please select a category');
+      }
+
+      // If adding new category, update categories list first
+      if (isAddingNewCategory) {
+        await updateCategories(newCategory.trim());
+        // Refresh categories list
+        const updatedCategories = await fetchCategories();
+        setExistingCategories(updatedCategories);
       }
 
       // Create the question with the category
@@ -57,20 +69,13 @@ function Ask() {
     } catch (error) {
       console.error('Error submitting question:', error);
       setError(error.message || 'Failed to submit question. Please try again.');
-      
-      // If error indicates user profile issues, redirect to login
-      if (error.message.includes('User profile not found')) {
-        alert('Session expired. Please log in again.');
-        navigate('/login');
-        return;
-      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="max-w-2xl mx-auto mt-8 p-6 bg-white rounded-lg shadow-md">
       <h1 className="text-2xl font-bold mb-6">Ask a Question</h1>
       
       {error && (

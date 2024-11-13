@@ -105,7 +105,11 @@ export const FirebaseProvider = ({ children }) => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
       setUser(user);
     });
-    return () => unsubscribe(); // Cleanup subscription on unmount
+    
+    // Initialize categories document
+    initializeCategories();
+    
+    return () => unsubscribe();
   }, []);
 
   const login = async (email, password) => {
@@ -576,8 +580,34 @@ export const FirebaseProvider = ({ children }) => {
 
   const fetchCategories = async () => {
     try {
-      const categoryDoc = await getDoc(doc(db, 'categories', 'allCategories'));
-      return categoryDoc.exists() ? categoryDoc.data().list || [] : [];
+      // Get all questions to extract unique categories
+      const questionsSnapshot = await getDocs(collection(db, 'questions'));
+      const categoriesFromQuestions = new Set();
+      
+      questionsSnapshot.forEach(doc => {
+        const category = doc.data().category;
+        if (category) {
+          categoriesFromQuestions.add(category);
+        }
+      });
+
+      // Get categories from the categories collection
+      const categoryRef = doc(db, 'categories', 'allCategories');
+      const categoryDoc = await getDoc(categoryRef);
+      
+      let savedCategories = [];
+      if (categoryDoc.exists()) {
+        savedCategories = categoryDoc.data().list || [];
+      }
+
+      // Combine both sets of categories
+      const allCategories = [...new Set([...savedCategories, ...categoriesFromQuestions])];
+      
+      // Update the categories document with all found categories
+      await setDoc(categoryRef, { list: allCategories }, { merge: true });
+      
+      console.log('All categories:', allCategories);
+      return allCategories;
     } catch (error) {
       console.error('Error fetching categories:', error);
       return [];
@@ -585,29 +615,36 @@ export const FirebaseProvider = ({ children }) => {
   };
 
   const updateCategories = async (newCategory) => {
+    if (!newCategory) return;
+    
     try {
       const categoryRef = doc(db, 'categories', 'allCategories');
       
-      // Try to get existing categories
+      // Get current categories
       const categoryDoc = await getDoc(categoryRef);
+      let currentCategories = [];
       
-      if (!categoryDoc.exists()) {
-        // If document doesn't exist, create it with the new category
-        await setDoc(categoryRef, {
-          list: [newCategory]
-        });
-      } else {
-        // If document exists and category isn't in the list, add it
-        const categories = categoryDoc.data().list || [];
-        if (!categories.includes(newCategory)) {
-          await updateDoc(categoryRef, {
-            list: arrayUnion(newCategory)
-          });
-        }
+      if (categoryDoc.exists()) {
+        currentCategories = categoryDoc.data().list || [];
       }
+      
+      // Check if category already exists (case-insensitive)
+      const categoryExists = currentCategories.some(
+        cat => cat.toLowerCase() === newCategory.toLowerCase()
+      );
+      
+      if (!categoryExists) {
+        // Add new category
+        const updatedCategories = [...currentCategories, newCategory];
+        await setDoc(categoryRef, { list: updatedCategories });
+        console.log('Added new category:', newCategory);
+        return updatedCategories;
+      }
+      
+      return currentCategories;
     } catch (error) {
       console.error('Error updating categories:', error);
-      // Don't throw error here to prevent question creation from failing
+      throw new Error('Failed to update categories');
     }
   };
 
@@ -667,6 +704,42 @@ export const FirebaseProvider = ({ children }) => {
     } catch (error) {
       console.error('Error updating answer:', error);
       throw error;
+    }
+  };
+
+  const initializeCategories = async () => {
+    try {
+      // Fetch all questions to get existing categories
+      const questionsSnapshot = await getDocs(collection(db, 'questions'));
+      const categoriesFromQuestions = new Set();
+      
+      questionsSnapshot.forEach(doc => {
+        const category = doc.data().category;
+        if (category) {
+          categoriesFromQuestions.add(category);
+        }
+      });
+
+      // Get or create the categories document
+      const categoryRef = doc(db, 'categories', 'allCategories');
+      const categoryDoc = await getDoc(categoryRef);
+      
+      if (!categoryDoc.exists()) {
+        // Create new document with categories from questions
+        await setDoc(categoryRef, {
+          list: Array.from(categoriesFromQuestions)
+        });
+      } else {
+        // Update existing document with any missing categories
+        const existingCategories = categoryDoc.data().list || [];
+        const allCategories = [...new Set([...existingCategories, ...categoriesFromQuestions])];
+        
+        if (allCategories.length > existingCategories.length) {
+          await setDoc(categoryRef, { list: allCategories });
+        }
+      }
+    } catch (error) {
+      console.error('Error initializing categories:', error);
     }
   };
 
